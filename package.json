@@ -1,0 +1,29 @@
+{
+  "name": "y",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "gts lint",
+    "clean": "gts clean",
+    "compile": "tsc",
+    "fix": "gts fix",
+    "prepare": "npm run compile",
+    "pretest": "npm run compile",
+    "posttest": "npm run lint",
+    "start" : "ts-node src/index.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^16.11.57",
+    "gts": "^4.0.0",
+    "typescript": "~4.7.0"
+  },
+  "dependencies": {
+    "@metaplex-foundation/js": "^0.15.0",
+    "@solana/web3.js": "^1.56.2",
+    "ts-node": "^10.9.1"
+  }
+}
