@@ -12,6 +12,7 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
+  sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import {readFileSync} from 'fs';
 import {parse} from 'yaml';
@@ -20,19 +21,13 @@ import * as splToken from '@solana/spl-token';
 import * as tokenMetadata from '@metaplex-foundation/mpl-token-metadata';
 import {BN} from 'bn.js';
 
-export const createTokenAccount = async ({
-  payer,
-  mint,
-  connection,
-  owner,
-  account,
-}: {
-  payer: PublicKey;
-  mint: PublicKey;
-  connection: Connection;
-  account: Keypair;
-  owner?: PublicKey;
-}) => {
+export const createTokenAccount = async (
+  payer: Keypair,
+  mint: PublicKey,
+  connection: Connection,
+  account: Keypair,
+  owner?: PublicKey
+) => {
   const createTokenTx = new Transaction();
 
   const accountRentExempt = await connection.getMinimumBalanceForRentExemption(
@@ -41,7 +36,7 @@ export const createTokenAccount = async ({
 
   createTokenTx.add(
     SystemProgram.createAccount({
-      fromPubkey: payer,
+      fromPubkey: payer.publicKey,
       newAccountPubkey: account.publicKey,
       lamports: accountRentExempt,
       space: splToken.AccountLayout.span,
@@ -54,19 +49,20 @@ export const createTokenAccount = async ({
       splToken.TOKEN_PROGRAM_ID,
       mint,
       account.publicKey,
-      owner ?? payer
+      owner ?? payer.publicKey
     )
   );
 
   createTokenTx.recentBlockhash = (
     await connection.getLatestBlockhash()
   ).blockhash;
-  createTokenTx.feePayer = payer;
+  createTokenTx.feePayer = payer.publicKey;
   createTokenTx.partialSign(account);
 
-  return {
-    createTokenTx,
-  };
+  return await sendAndConfirmTransaction(connection, createTokenTx, [
+    payer,
+    account,
+  ]);
 };
 
 interface AttributeInfo {
@@ -89,6 +85,8 @@ interface NFTMetadata {
 }
 
 async function main() {
+  // const {payer, connection, transactionHandler} = await createPrerequisites();
+
   const nftsToUpload = 3;
   const nftsMinted = [];
 
@@ -136,16 +134,15 @@ async function main() {
   //   'finalized'
   // );
   const store = Keypair.generate().publicKey;
-  const admin = wallet.publicKey;
   const storeName = 'Bau Jee di bhatti';
   const storeDescription = 'sastay may phastay saaray hastay hastay ::(';
 
   const sellingResource = nftsMinted[0];
-  const ix = [];
+  const tx = new Transaction();
   /// flollowing flow at https://docs.metaplex.com/programs/fixed-price-sale/tech-description
   const createStoreIx = fixedPriceSale.createCreateStoreInstruction(
     {
-      admin,
+      admin: wallet.publicKey,
       store,
     },
     {
@@ -153,7 +150,7 @@ async function main() {
       description: storeDescription,
     }
   );
-  ix.push(createStoreIx);
+  tx.add(createStoreIx);
   /// Create Vault owner token
   const [vaultOwner, vaultOwnerBump] =
     await fixedPriceSale.findVaultOwnerAddress(
@@ -162,13 +159,13 @@ async function main() {
     );
 
   const vault = Keypair.generate();
-  const createTokenTx = await createTokenAccount({
-    payer: wallet.publicKey,
-    mint: sellingResource.mintAddress,
+  const createTokenTxSig = await createTokenAccount(
+    wallet,
+    sellingResource.mintAddress,
     connection,
-    account: vault,
-    owner: vaultOwner,
-  });
+    vault,
+    vaultOwner
+  );
 
   const sellingResourceAccount = Keypair.generate();
   const masterEditionPda = findMasterEditionV2Pda(
@@ -196,6 +193,8 @@ async function main() {
         maxSupply: new BN(1),
       }
     );
+  tx.add(initSellingResourceIx);
+  await sendAndConfirmTransaction(connection, tx, [wallet]);
 }
 
 main().then(
